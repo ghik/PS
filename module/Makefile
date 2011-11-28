@@ -1,4 +1,4 @@
-obj-m := vfs_module.o
+obj-m := vfs_module.o gnKernel.o
 
 all:
 	make -C /usr/src/linux-headers-`uname -r` M=`pwd` modules
