@@ -10,7 +10,15 @@
 
 #ifdef __KERNEL__
 #include <net/genetlink.h>
+#else
+#include <linux/genetlink.h>
 #endif
+
+#define GENLMSG_DATA(glh) ((void *)(NLMSG_DATA(glh) + GENL_HDRLEN))
+#define GENLMSG_PAYLOAD(glh) (NLMSG_PAYLOAD(glh, 0) - GENL_HDRLEN)
+#define NLA_DATA(na) ((void *)((char*)(na) + NLA_HDRLEN))
+
+#define MAX_MSG_SIZE 1024
 
 /* Tutaj właściwie tylko PSVFS_A_MSG ma znaczenie - jest to oznaczenie atrybutu
  * (czyli kawałka danych wchodzącego w skład wiadomości), który
