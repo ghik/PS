@@ -25,7 +25,7 @@
  * będzie trzymał stringa z wiadomością do/od kernela.
  */
 enum {
-	PSVFS_A_UNSPEC,
+	PSVFS_A_DATA,
 	PSVFS_A_MSG,
     __PSVFS_A_MAX,
 };
@@ -38,11 +38,14 @@ enum {
 	PSVFS_C_UNSPEC,
 	PSVFS_C_INIT, // init filesystem (result of SSH/SCP login)
 	PSVFS_C_DESTROY, // destroy filesystem (result of SSH/SCP logout)
+	PSVFS_C_READ,
+	PSVFS_C_WRITE,
 	__PSVFS_C_MAX,
 };
 #define PSVFS_C_MAX (__PSVFS_C_MAX - 1)
 
 struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1] = {
+	[PSVFS_A_DATA] = { .type = NLA_UNSPEC },
 	[PSVFS_A_MSG] = { .type = NLA_STRING },
 };
 
