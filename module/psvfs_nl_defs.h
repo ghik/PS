@@ -11,14 +11,26 @@
 #ifdef __KERNEL__
 #include <net/genetlink.h>
 #else
+#include <sys/socket.h>
 #include <linux/genetlink.h>
+#include <netlink/netlink.h>
+#include <netlink/genl/genl.h>
+#include <netlink/genl/ctrl.h>
 #endif
+
 
 #define GENLMSG_DATA(glh) ((void *)(NLMSG_DATA(glh) + GENL_HDRLEN))
 #define GENLMSG_PAYLOAD(glh) (NLMSG_PAYLOAD(glh, 0) - GENL_HDRLEN)
 #define NLA_DATA(na) ((void *)((char*)(na) + NLA_HDRLEN))
 
 #define MAX_MSG_SIZE 1024
+
+struct msg_buf {
+  struct nlmsghdr n;
+  struct genlmsghdr g;
+  char buf[MAX_MSG_SIZE];
+};
+
 
 /* Tutaj właściwie tylko PSVFS_A_MSG ma znaczenie - jest to oznaczenie atrybutu
  * (czyli kawałka danych wchodzącego w skład wiadomości), który
@@ -43,11 +55,6 @@ enum {
 	__PSVFS_C_MAX,
 };
 #define PSVFS_C_MAX (__PSVFS_C_MAX - 1)
-
-struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1] = {
-	[PSVFS_A_DATA] = { .type = NLA_UNSPEC },
-	[PSVFS_A_MSG] = { .type = NLA_STRING },
-};
 
 #define PSVFS_VERSION 1
 #define PSVFS_FAMILY_NAME "PSVFS_FAMILY"

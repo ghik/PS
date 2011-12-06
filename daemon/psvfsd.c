@@ -5,16 +5,11 @@
  *      Author: ghik
  */
 
-#include <netlink/netlink.h>
-#include <netlink/genl/genl.h>
-#include <netlink/genl/ctrl.h>
-
 #include "psvfs_nl_defs.h"
 
-struct msg_buf {
-	struct nlmsghdr n;
-	struct genlmsghdr g;
-	char buf[MAX_MSG_SIZE];
+struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1] = {
+  [PSVFS_A_DATA] = { .type = NLA_UNSPEC },
+  [PSVFS_A_MSG] = { .type = NLA_STRING },
 };
 
 void send_to_kernel(struct nl_sock* sock, int family, int command, int seq, const char* msg, int len) {

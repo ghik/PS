@@ -25,6 +25,11 @@
  * Functions
  */
 
+struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1] = {
+  [PSVFS_A_DATA] = { .type = NLA_UNSPEC },
+  [PSVFS_A_MSG] = { .type = NLA_STRING },
+};
+
 /* Initializes module */
 int psvfs_module_init(void);
 /* Exits module */

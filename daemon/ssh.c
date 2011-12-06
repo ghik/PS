@@ -4,8 +4,6 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <libssh/libssh.h>
-#include <libssh/sftp.h>
 #include "ssh.h"
 
 int verify_knownhost(ssh_session session)
@@ -300,7 +298,6 @@ int main()
   ssh_session my_ssh_session;
   char* user = "schiza";
   char* host = "localhost";
-  char *password;
   char* filepath = "/home/schiza/Pulpit/test-ssh.txt";
   char* msg = "i kot jest zdrowy!\n";
   int offset = 12;
