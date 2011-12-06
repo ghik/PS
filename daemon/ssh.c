@@ -6,7 +6,7 @@
 #include <fcntl.h>
 #include <libssh/libssh.h>
 #include <libssh/sftp.h>
-
+#include "ssh.h"
 
 int verify_knownhost(ssh_session session)
 {
@@ -293,7 +293,7 @@ int sftp_write_sync(ssh_session session, sftp_session sftp, char* filepath, int 
   return SSH_OK;
 }
 
-
+/*
 int main()
 {
   // test funkcji
@@ -319,3 +319,4 @@ int main()
   close_session(my_ssh_session);
   printf("Connection to %s@%s closed\n", user, host);
 }
+*/

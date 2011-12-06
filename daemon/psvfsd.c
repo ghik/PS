@@ -56,6 +56,7 @@ char* receive_from_kernel(struct nl_sock* sock, struct msg_buf* buf) {
 	return (char *) NLA_DATA(na);
 }
 
+/*
 int main(int argc, char** argv) {
 	struct nl_sock *sock;
 	int i, family, res;
@@ -95,3 +96,4 @@ int main(int argc, char** argv) {
 
 	return 0;
 }
+*/
