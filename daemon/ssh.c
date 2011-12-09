@@ -128,7 +128,7 @@ void close_session(ssh_session session) {
 }
 
 
-int sftp_read_file(ssh_session session, char* filepath, int offset, int size) {
+int sftp_read_file(ssh_session session, char* filepath, int offset, int size, char* buffer) {
   sftp_session sftp;
   int rc;
 
@@ -151,7 +151,7 @@ int sftp_read_file(ssh_session session, char* filepath, int offset, int size) {
     }
 
   // read
-  rc = sftp_read_sync(session, sftp, filepath, offset, size);
+  rc = sftp_read_sync(session, sftp, filepath, offset, size, buffer);
   
   // closing
   sftp_free(sftp);
@@ -159,11 +159,11 @@ int sftp_read_file(ssh_session session, char* filepath, int offset, int size) {
 }
 
 
-int sftp_read_sync(ssh_session session, sftp_session sftp, char* filepath, int offset, int size)
+int sftp_read_sync(ssh_session session, sftp_session sftp, char* filepath, int offset, int size, char* buffer)
 {
   int access_type;
   sftp_file file;
-  char buffer[size];
+  buffer = (char *) malloc(sizeof(char) * size);
   int nbytes, rc;
 
   access_type = O_RDONLY;
@@ -184,15 +184,15 @@ int sftp_read_sync(ssh_session session, sftp_session sftp, char* filepath, int o
     
     }
 
-  nbytes = sftp_read(file, buffer, sizeof(buffer));
+  nbytes = sftp_read(file, &buffer, sizeof(*buffer));
   while (nbytes > 0)
     {
-      if (write(1, buffer, nbytes) != nbytes)
+      if (write(1, &buffer, nbytes) != nbytes)
 	{
 	  sftp_close(file);
 	  return SSH_ERROR;
 	}
-      nbytes = sftp_read(file, buffer, sizeof(buffer));
+      nbytes = sftp_read(file, &buffer, sizeof(*buffer));
     }
 
   if (nbytes < 0)

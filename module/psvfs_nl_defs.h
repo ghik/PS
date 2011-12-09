@@ -25,10 +25,21 @@
 
 #define MAX_MSG_SIZE 1024
 
+#define MAX_PATH_SIZE 256
+#define MAX_BUF_SIZE 256
+
 struct msg_buf {
   struct nlmsghdr n;
   struct genlmsghdr g;
   char buf[MAX_MSG_SIZE];
+};
+
+struct file_op_msg {
+  int op; // 0 read, 1 write
+  char filepath[MAX_PATH_SIZE]; // sciezka do pliku
+  int offset; // offset w pliku
+  int size; // rozmiar do odczytu/zapisu
+  char msg[MAX_BUF_SIZE]; // odczytana wiadomosc / wiadomosc do zapisu
 };
 
 
