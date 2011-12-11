@@ -6,8 +6,8 @@ psvfsd.o: psvfsd.c psvfs_nl_defs.h
 ssh.o: ssh.c ssh.h
 	gcc -c ssh.c
 
-mount-daemon: psvfsd.o ssh.o mount-daemon.c
-	gcc -o mount-daemon psvfsd.o ssh.o mount-daemon.c -lssh -lnl -lnl-genl
+mount-daemon: mount-daemon.c ssh.o psvfsd.o
+	gcc -o mount-daemon ssh.o psvfsd.o mount-daemon.c -lssh -lnl -lnl-genl
 
 clean:
 	rm *.o mount-daemon

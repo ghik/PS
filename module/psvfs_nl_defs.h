@@ -1,3 +1,6 @@
+#ifndef PSVFS_NL_DEFS_H_
+#define PSVFS_NL_DEFS_H_
+
 /*
  * psvfs_nl_defs.h
  *
@@ -5,15 +8,13 @@
  *      Author: ghik
  */
 
-#ifndef PSVFS_NL_DEFS_H_
-#define PSVFS_NL_DEFS_H_
-
 #ifdef __KERNEL__
 #include <net/genetlink.h>
 #else
 #include <netlink/netlink.h>
 #include <netlink/genl/genl.h>
 #include <netlink/genl/ctrl.h>
+int receive_from_kernel_cb(struct nl_msg *msg, void *arg, void* pres);
 #endif
 
 #define MAX_PATH_SIZE 256
@@ -43,9 +44,8 @@ enum {
 };
 #define PSVFS_C_MAX (__PSVFS_C_MAX - 1)
 
-struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1] = {
-	[PSVFS_A_MSG] = { .type = NLA_UNSPEC }, // no policy, just a chunk of bytes
-};
+extern struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1];
+
 
 #define PSVFS_VERSION 1
 #define PSVFS_FAMILY_NAME "PSVFS_FAMILY"

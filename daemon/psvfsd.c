@@ -12,12 +12,17 @@
 
 #include "psvfs_nl_defs.h"
 
-int ires = 0;
-void* pres = NULL;
+struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1] = {
+  [PSVFS_A_MSG] = { .type = NLA_UNSPEC }, // no policy, just a chunk of bytes
+};
 
-void* data = NULL; // passed to receive callback as destination to save incoming data
 
-void check(int condition, const char* msg) {
+//int ires = 0;
+//void* pres = NULL;
+
+// void* data = NULL; // passed to receive callback as destination to save incoming data
+
+void check(int condition, const char* msg, int ires, void* pres) {
 	if(!condition) {
 		fprintf(stderr, "%s failed with results %i %i\n", msg, ires, (int)pres);
 		perror("Fail is");
@@ -25,16 +30,16 @@ void check(int condition, const char* msg) {
 	}
 }
 
-int receive_from_kernel_cb(struct nl_msg *msg, void *arg) {
+int receive_from_kernel_cb(struct nl_msg *msg, void *arg, void* pres) {
 	struct nlmsghdr* hdr = nlmsg_hdr(msg);
 	struct nlattr* attrs[PSVFS_A_MAX+1];
 	void** dest = (void**)arg;
-	int len;
+	int len, ires;
 
-	check(hdr != NULL, "nlmsg_hdr");
+	check(hdr != NULL, "nlmsg_hdr", 0, pres);
 
 	ires = genlmsg_parse(hdr, 0, attrs, PSVFS_A_MAX, psvfs_genl_policy);
-	check(ires == 0, "genlmsg_parse");
+	check(ires == 0, "genlmsg_parse", ires, pres);
 
 	len = nla_len(attrs[PSVFS_A_MSG]);
 	if(attrs[PSVFS_A_MSG] != NULL && len > 0) {
@@ -44,25 +49,26 @@ int receive_from_kernel_cb(struct nl_msg *msg, void *arg) {
 	return 0;
 }
 
-void send_to_kernel(struct nl_sock* sock, int family, int command, void* msg, int len) {
+void send_to_kernel(struct nl_sock* sock, int family, int command, void* msg, int len, void* pres) {
 	// 36 was determined by binary search :) no idea how exactly do it
+        int ires;
 	struct nl_msg *nlmsg = nlmsg_alloc_size(GENL_HDRLEN+nla_total_size(len)+36);
-	check(nlmsg != NULL, "alloc");
+	check(nlmsg != NULL, "alloc", 0, pres);
 
 	pres = genlmsg_put(nlmsg, NL_AUTO_PID, NL_AUTO_SEQ, family, 0, NLM_F_ECHO, command, PSVFS_VERSION);
-	check(pres != NULL, "genlmsg_put");
+	check(pres != NULL, "genlmsg_put", 0, pres);
 
 	ires = nla_put(nlmsg, PSVFS_A_MSG, len, msg);
-	check(ires == 0, "nla_put");
+	check(ires == 0, "nla_put", ires, pres);
 
 	// Send message over netlink socket
 	ires = nl_send_auto_complete(sock, nlmsg);
-	check(ires >= 0, "nl_send");
+	check(ires >= 0, "nl_send", ires, pres);
 
 	nlmsg_free(nlmsg);
 }
 
-
+/*
 int main(int argc, char** argv) {
 	struct nl_sock *sock;
 	int family, res;
@@ -161,3 +167,4 @@ int main(int argc, char** argv) {
 	return 0;
 }
 
+*/

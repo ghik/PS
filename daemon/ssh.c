@@ -130,7 +130,7 @@ void close_session(ssh_session session) {
 
 int sftp_read_file(ssh_session session, char* filepath, int offset, int size, char* buffer) {
   sftp_session sftp;
-  int rc;
+  int rc, sum;
 
   // init
   sftp = sftp_new(session);
@@ -151,11 +151,11 @@ int sftp_read_file(ssh_session session, char* filepath, int offset, int size, ch
     }
 
   // read
-  rc = sftp_read_sync(session, sftp, filepath, offset, size, buffer);
+  sum = sftp_read_sync(session, sftp, filepath, offset, size, buffer);
   
   // closing
   sftp_free(sftp);
-  return rc;
+  return sum;
 }
 
 
@@ -163,8 +163,8 @@ int sftp_read_sync(ssh_session session, sftp_session sftp, char* filepath, int o
 {
   int access_type;
   sftp_file file;
-  buffer = (char *) malloc(sizeof(char) * size);
   int nbytes, rc;
+  int sum = 0;
 
   access_type = O_RDONLY;
   file = sftp_open(sftp, filepath,
@@ -187,6 +187,7 @@ int sftp_read_sync(ssh_session session, sftp_session sftp, char* filepath, int o
   nbytes = sftp_read(file, &buffer, sizeof(*buffer));
   while (nbytes > 0)
     {
+      sum += nbytes;
       if (write(1, &buffer, nbytes) != nbytes)
 	{
 	  sftp_close(file);
@@ -211,7 +212,7 @@ int sftp_read_sync(ssh_session session, sftp_session sftp, char* filepath, int o
       return rc;
     }
 
-  return SSH_OK;
+  return sum;
 }
 
 
@@ -253,7 +254,6 @@ int sftp_write_sync(ssh_session session, sftp_session sftp, char* filepath, int 
   int length = strlen(msg);
   int rc, nwritten;
 
-
   file = sftp_open(sftp, filepath,
 		   access_type, S_IRWXU);
   if (file == NULL)
@@ -277,7 +277,7 @@ int sftp_write_sync(ssh_session session, sftp_session sftp, char* filepath, int 
       fprintf(stderr, "Can't write data to file: %s\n",
 	      ssh_get_error(session));
       sftp_close(file);
-      return SSH_ERROR;
+      return nwritten;
     }
 
   rc = sftp_close(file);
@@ -288,7 +288,7 @@ int sftp_write_sync(ssh_session session, sftp_session sftp, char* filepath, int 
       return rc;
     }
 
-  return SSH_OK;
+  return nwritten;
 }
 
 /*

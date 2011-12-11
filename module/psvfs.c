@@ -1,5 +1,10 @@
 #include "psvfs.h"
 
+struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1] = {
+  [PSVFS_A_MSG] = { .type = NLA_UNSPEC }, // no policy, just a chunk of bytes
+};
+
+
 int check(int condition, const char* msg) {
 	if(!condition) {
 		printk(KERN_INFO "%s failed\n", msg);
