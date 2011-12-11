@@ -15,7 +15,7 @@
 int ires = 0;
 void* pres = NULL;
 
-void* data = NULL;
+void* data = NULL; // passed to receive callback as destination to save incoming data
 
 void check(int condition, const char* msg) {
 	if(!condition) {
@@ -25,19 +25,12 @@ void check(int condition, const char* msg) {
 	}
 }
 
-struct msg_buf {
-	struct nlmsghdr n;
-	struct genlmsghdr g;
-	char buf[sizeof(struct rw_request)];
-};
-
 int receive_from_kernel_cb(struct nl_msg *msg, void *arg) {
 	struct nlmsghdr* hdr = nlmsg_hdr(msg);
 	struct nlattr* attrs[PSVFS_A_MAX+1];
 	void** dest = (void**)arg;
 	int len;
 
-	printf("Callback\n");
 	check(hdr != NULL, "nlmsg_hdr");
 
 	ires = genlmsg_parse(hdr, 0, attrs, PSVFS_A_MAX, psvfs_genl_policy);
@@ -67,22 +60,22 @@ void send_to_kernel(struct nl_sock* sock, int family, int command, void* msg, in
 	check(ires >= 0, "nl_send");
 
 	nlmsg_free(nlmsg);
-
-	printf("All sent.\n");
 }
+
 
 int main(int argc, char** argv) {
 	struct nl_sock *sock;
 	int family, res;
 
-	struct msg_buf msgbuf;
 	struct rw_request req;
 	struct rw_response resp;
 
-	char buf[sizeof(struct rw_request)];
+	char buf[4096];
 	char* ptr = buf;
 
 	FILE* f = fopen("afile", "r+");
+
+	nl_debug = INT32_MAX;
 
 	// Allocate a new netlink socket
 	sock = nl_socket_alloc();
@@ -139,7 +132,7 @@ int main(int argc, char** argv) {
 				send_to_kernel(sock, family, PSVFS_C_DATA, (void*)data, resp.count);
 			}
 
-			free(data);
+			free((void*)data);
 
 			break;
 		case PSVFS_OP_WRITE:
@@ -167,3 +160,4 @@ int main(int argc, char** argv) {
 
 	return 0;
 }
+

@@ -1,6 +1,8 @@
 module/*.order
 module/*.symvers
-module/*.o
+*/*.o
 module/*.ko
 module/*.mod.c
 module/*.cmd
+module/.tmp_versions/*
+daemon/mount-daemon

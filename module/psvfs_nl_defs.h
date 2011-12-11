@@ -11,14 +11,12 @@
 #ifdef __KERNEL__
 #include <net/genetlink.h>
 #else
-#include <linux/genetlink.h>
+#include <netlink/netlink.h>
+#include <netlink/genl/genl.h>
+#include <netlink/genl/ctrl.h>
 #endif
 
-#define GENLMSG_DATA(glh) ((void *)(NLMSG_DATA(glh) + GENL_HDRLEN))
-#define GENLMSG_PAYLOAD(glh) (NLMSG_PAYLOAD(glh, 0) - GENL_HDRLEN)
-#define NLA_DATA(na) ((void *)((char*)(na) + NLA_HDRLEN))
-
-#define MAX_MSG_SIZE 1024
+#define MAX_PATH_SIZE 256
 
 /* Tutaj właściwie tylko PSVFS_A_MSG ma znaczenie - jest to oznaczenie atrybutu
  * (czyli kawałka danych wchodzącego w skład wiadomości), który
@@ -38,15 +36,15 @@ enum {
 	PSVFS_C_UNSPEC,
 	PSVFS_C_INIT, // init filesystem (result of SSH/SCP login)
 	PSVFS_C_DESTROY, // destroy filesystem (result of SSH/SCP logout)
-	PSVFS_C_REQUEST,
-	PSVFS_C_RESPONSE,
-	PSVFS_C_DATA,
+	PSVFS_C_REQUEST, // filesystem operation request
+	PSVFS_C_RESPONSE, // filesystem operation response
+	PSVFS_C_DATA, // filesystem operation data
 	__PSVFS_C_MAX,
 };
 #define PSVFS_C_MAX (__PSVFS_C_MAX - 1)
 
 struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1] = {
-	[PSVFS_A_MSG] = { .type = NLA_UNSPEC },
+	[PSVFS_A_MSG] = { .type = NLA_UNSPEC }, // no policy, just a chunk of bytes
 };
 
 #define PSVFS_VERSION 1
@@ -59,14 +57,14 @@ enum {
 };
 
 struct rw_request {
-	int operation;
+	int operation; // PSVFS_OP_*
 	size_t count;
 	loff_t offset;
-	char filename[256];
+	char filename[MAX_PATH_SIZE];
 };
 
 struct rw_response {
-	int operation;
+	int operation; // PSVFS_OP_*, must be the same as for corresponding request
 	size_t count;
 	loff_t offset;
 };

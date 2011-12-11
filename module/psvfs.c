@@ -265,10 +265,14 @@ ssize_t psvfs_write(struct file *filp, const char *buf, size_t count,
 	res = send_to_daemon(&req, sizeof(req), PSVFS_C_REQUEST, atomic_add_return(1,&seq), daemon_pid);
 	ASSERT(res == 0, "send_to_daemon", out);
 
+	printk(KERN_INFO "Write request sent.\n");
+
 	if(count > 0) {
 		res = send_to_daemon((void*)data, count, PSVFS_C_DATA, atomic_add_return(1,&seq), daemon_pid);
 		ASSERT(res == 0, "send_to_daemon", out);
 	}
+
+	printk(KERN_INFO "Data sent.\n");
 
 	if(wait_event_interruptible(vfs_queue, responded == 1) != 0) {
 		fres = -EINTR;
@@ -279,6 +283,8 @@ ssize_t psvfs_write(struct file *filp, const char *buf, size_t count,
 		fres = -EIO;
 		goto out;
 	}
+
+	printk(KERN_INFO "Got response %i %lli\n", resp.count, resp.offset);
 
 	*offset = resp.offset;
 	fres = resp.count;
@@ -311,6 +317,7 @@ int send_to_daemon(void* msg, int len, int command, int seq, u32 pid) {
 	ASSERT(res > 0, "genlmsg_end", out);
 
 	res = genlmsg_unicast(&init_net, skb, pid);
+	printk("If failed, it is %i\n", res);
 	ASSERT(res == 0, "genlmsg_unicast", out);
 
   out:
