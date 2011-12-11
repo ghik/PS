@@ -33,8 +33,12 @@ void psvfs_module_exit(void);
 int psvfs_vfs_init(struct sk_buff *skb2, struct genl_info *info);
 /* Destroys virtual filesystem as a resutl of message from userspace daemon */
 int psvfs_vfs_destroy(struct sk_buff *skb2, struct genl_info *info);
+/* Receives response from daemon */
+int psvfs_receive_response(struct sk_buff* skb2, struct genl_info *info);
+/* Receives data from daemon */
+int psvfs_receive_data(struct sk_buff* skb2, struct genl_info *info);
 /* Sends a request to userspace daemon */
-int send_to_daemon(char* msg, int command, int seq, u32 pid);
+int send_to_daemon(void* msg, int len, int command, int seq, u32 pid);
 
 int psvfs_get_super(struct file_system_type *fst, int flags,
 		const char *devname, void *data, struct vfsmount* mount);
@@ -79,6 +83,21 @@ struct genl_ops psvfs_gnl_ops_destroy = {
 	.dumpit = NULL,
 };
 
+struct genl_ops psvfs_gnl_ops_receive_response = {
+	.cmd = PSVFS_C_RESPONSE,
+	.flags = 0,
+	.policy = psvfs_genl_policy,
+	.doit = psvfs_receive_response,
+	.dumpit = NULL,
+};
+
+struct genl_ops psvfs_gnl_ops_receive_data = {
+	.cmd = PSVFS_C_DATA,
+	.flags = 0,
+	.policy = psvfs_genl_policy,
+	.doit = psvfs_receive_data,
+	.dumpit = NULL,
+};
 
 /*
  * VFS stuff
@@ -119,8 +138,20 @@ struct file_operations psvfs_file_ops = {
  */
 
 atomic_t seq;
-char* data = NULL;
-int datalen = 0;
+volatile u32 daemon_pid = 0;
+
+struct rw_request req;
+volatile struct rw_response resp;
+volatile int responded;
+volatile int dataarrived;
+volatile int resp_ok;
+volatile int data_ok;
+
+volatile int fnlen = 0;
+volatile void* volatile filenames = NULL;
+volatile void* volatile data = NULL;
+volatile int databytes = 0;
+
 DEFINE_MUTEX(vfs_mutex);
 DECLARE_WAIT_QUEUE_HEAD(vfs_queue);
 
