@@ -1,0 +1,51 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>Sterownik systemu plików przez SSH/SCP w systemie Linux - koncepcja systemu</title>
+</head>
+<body>
+
+Roman Janusz, Jakub Wojtysiak
+<h1>Sterownik dysku przez SSH/SCP w systemie Linux - koncepcja systemu.</h1>
+<h2>1. Cel, wymagania i ogólna architektura</h2>
+<p>elem projektu jest stworzenie sterownika w systemie Linux, który stworzy w systemie wirtualny system plików w rzeczywistości obsługiwany za pomocą SSH/SCP. Obsługa systemu plików będzie uproszczona do zawartości jednego katalogu (bez podkatalogów).</p>
+<p>Użytkownikowi końcowemu udostępnione zostaną następujące funkcje:</p>
+<ul>
+  <li>mechanizm montowania i odmontowywania wirtualnego systemu plików (np. komendy mount/umount)</li>
+  <li>mechanizm inicjacji wirtualnego systemu plików przez utworzenie połączenia SSH/SCP i podanie docelowego folderu - poprzez uruchomienie programu z odpowiednimi parametrami w shellu.</li>
+  <li>mechanizm zwalniania wirtualnego systemu plików i połączenia SSH/SCP (odpowiednia komenda w shellu)</li>
+  <li>system plików, tzn. możliwość wykonywania podstawowych operacji na plikach w obrębie jednego katalogu za pomocą odpowiednich wywołań systemowych (open/read/write itp.), a w konsekwencji za pomocą dowolnego programu odwołującego się do systemu plików (np. menedżera plików)</li>
+</ul>
+<p>Powyższą funkcjonalność realizowały będą dwa komunikujące się ze sobą komponenty: <br /></p>
+<ul>
+  <li>sterownik wirtualnego systemu plików - moduł jądra umożliwiający montowanie systemu plików i korzystanie z niego za pomocą standardowych wywołań systemowych <br /></li>
+  <li>program w przestrzeni użytkownika działający jako daemon odpowiedzialny za komunikację przez SSH/SCP i operacje na zdalnym systemie plików</li>
+</ul>
+<p>Moduł jądra i daemon przestrzeni użytkownika będą się komunikować za pomocą jednego ze standardowych mechanizmów komunikacji Kernel-User space. W ten sposób moduł jądra może przekazywać wszelkie zapytania od używającego go (za pomocą wywołań systemowych) programu do deamona w przestrzeni użytkownika.</p>
+<h2>2. Moduł jądra</h2>
+<p>Moduł jądra będzie implementacją wirtualnego systemu plików za pomocą zbioru funkcji jądra Linuksa libfs. Bardziej szczegółowo, częściami implementacji modułu będą: <br /></p>
+<ul>
+  <li>kod inicjalizujący wirtualny system plików na podstawie komunikatu od deamona w przestrzeni użytkownika (efekt inicjacji połączenia SSH/SCP)</li>
+  <li> tłumaczenie parametrów wywołań systemowych na komunikaty wysyłane do daemona oraz odbieranie odpowiedzi i realizacja operacji systemu plików na jej podstawie</li>
+</ul>
+<h2>3. Daemon przestrzeni użytkownika</h2>
+<p>Program uruchamiany w przestrzeni użytkownika będzie odpowiedzialny za połączenie się ze zdalnym serwerem SSH/SCP, poinformowanie modułu jądra o połączeniu, oraz obsługę pochodzących z modułu jądra zapytań.</p>
+<p>Każde zapytanie reprezentować będzie operację na systemie plików (open/read/write itp.) i tłumaczone będzie na odpowiedni kod odwołujący się do zdalnego systemu plików przez SSH/SCP. Po otrzymaniu odpowiedzi rezultat zostanie przesłany z powrotem do modułu jądra.</p>
+<h2>4. Mechanizm komunikacji</h2>
+<p>Do komunikacji pomiędzy modułem jądra a programem w przestrzeni użytkownika zostanie użyty jeden ze standardowych mechanizmów takiej komunikacji w systemie Linux opartych na socketach. Mogą to być sockety UDP lub wyspecjalizowane w tym celu sockety NETLINK.</p>
+<h2>5. Narzędzia</h2>
+<p>Narzędzia planowane do użycia w projekcie: <br /></p>
+<ul>
+  <li>libfs - zestaw funkcji jądra Linuksa do tworzenia wirtualnych systemów plików <br /></li>
+  <li>libnl - biblioteka do obsługi socketów NETLINK w przestrzeni użytkownika <br /></li>
+  <li>libssh - biblioteka języka C dostarczająca interfejs SSH/SCP</li>
+</ul>
+<h2>6. Materiały</h2>
+<ul>
+  <li><a href="http://lwn.net/Articles/57369/">Creating Linux virtual filesystems</a><br /></li>
+  <li><a href="http://people.ee.ethz.ch/~arkeller/linux/kernel_user_space_howto.html">Kernel Space - User Space Interfaces</a><br /></li>
+  <li><a href="http://www.libssh.org/">libssh - The SSH Library</a><br /></li>
+</ul>
+
+</body>
+</html>
