@@ -15,6 +15,8 @@
 int ires = 0;
 void* pres = NULL;
 
+void* data = NULL;
+
 void check(int condition, const char* msg) {
 	if(!condition) {
 		fprintf(stderr, "%s failed with results %i %i\n", msg, ires, (int)pres);
@@ -29,9 +31,11 @@ struct msg_buf {
 	char buf[sizeof(struct rw_request)];
 };
 
-int receive_from_kernel_cb(struct nl_msg *msg, void *dest) {
+int receive_from_kernel_cb(struct nl_msg *msg, void *arg) {
 	struct nlmsghdr* hdr = nlmsg_hdr(msg);
 	struct nlattr* attrs[PSVFS_A_MAX+1];
+	void** dest = (void**)arg;
+	int len;
 
 	printf("Callback\n");
 	check(hdr != NULL, "nlmsg_hdr");
@@ -39,8 +43,9 @@ int receive_from_kernel_cb(struct nl_msg *msg, void *dest) {
 	ires = genlmsg_parse(hdr, 0, attrs, PSVFS_A_MAX, psvfs_genl_policy);
 	check(ires == 0, "genlmsg_parse");
 
-	if(attrs[PSVFS_A_MSG] != NULL) {
-		memcpy(dest, nla_data(attrs[PSVFS_A_MSG]), nla_len(attrs[PSVFS_A_MSG]));
+	len = nla_len(attrs[PSVFS_A_MSG]);
+	if(attrs[PSVFS_A_MSG] != NULL && len > 0) {
+		memcpy(*dest, nla_data(attrs[PSVFS_A_MSG]), len);
 	}
 
 	return 0;
@@ -66,45 +71,18 @@ void send_to_kernel(struct nl_sock* sock, int family, int command, void* msg, in
 	printf("All sent.\n");
 }
 
-void* receive_from_kernel(struct nl_sock* sock, struct msg_buf* buf) {
-	struct nlattr* na;
-
-	int rep_len = recv(nl_socket_get_fd(sock), buf, sizeof(struct msg_buf), 0);
-	/* Validate response message */
-	if (buf->n.nlmsg_type == NLMSG_ERROR) { /* error */
-		printf("error received NACK - leaving \n");
-		return NULL;
-	}
-	if (rep_len < 0) {
-		printf("error receiving reply message via Netlink \n");
-		return NULL;
-	}
-	if (!NLMSG_OK((&buf->n), rep_len)) {
-		printf("invalid reply message received via Netlink\n");
-		return NULL;
-	}
-
-	rep_len = GENLMSG_PAYLOAD(&buf->n);
-
-	na = (struct nlattr *) GENLMSG_DATA(buf);
-	return NLA_DATA(na);
-}
-
 int main(int argc, char** argv) {
 	struct nl_sock *sock;
 	int family, res;
 
 	struct msg_buf msgbuf;
-	struct rw_request req = { .filename = "lol, srsly, wtf dude?" };
+	struct rw_request req;
 	struct rw_response resp;
 
 	char buf[sizeof(struct rw_request)];
 	char* ptr = buf;
 
-	const char* data = NULL;
 	FILE* f = fopen("afile", "r+");
-
-	nl_debug = INT32_MAX;
 
 	// Allocate a new netlink socket
 	sock = nl_socket_alloc();
@@ -121,7 +99,7 @@ int main(int argc, char** argv) {
 	family = genl_ctrl_resolve(sock, PSVFS_FAMILY_NAME);
 	check(family != 0, "resolve");
 
-	ires = nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, receive_from_kernel_cb, buf);
+	ires = nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, receive_from_kernel_cb, (void*)&data);
 	check(ires == 0, "modify_cb");
 
 	strcpy(ptr, "somefile");
@@ -134,15 +112,14 @@ int main(int argc, char** argv) {
 	printf("Len is %i\n", ptr-buf);
 	send_to_kernel(sock, family, PSVFS_C_INIT, buf, ptr-buf);
 
+	data = buf;
 	ires = nl_recvmsgs_default(sock);
 	check(ires == 0, "recvmsgs");
 
 	printf("Kernel says: %s\n", buf);
 
-	ires = nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, receive_from_kernel_cb, (void*)&req);
-	check(ires == 0, "modify_cb");
-
 	while(1) {
+		data = &req;
 		ires = nl_recvmsgs_default(sock);
 		check(ires == 0, "nl_recvmsgs_default");
 
@@ -158,12 +135,29 @@ int main(int argc, char** argv) {
 			resp.offset = ftell(f);
 
 			send_to_kernel(sock, family, PSVFS_C_RESPONSE, &resp, sizeof(resp));
-			send_to_kernel(sock, family, PSVFS_C_DATA, (void*)data, resp.count);
+			if(resp.count > 0) {
+				send_to_kernel(sock, family, PSVFS_C_DATA, (void*)data, resp.count);
+			}
 
-			free((void*)data);
+			free(data);
 
 			break;
 		case PSVFS_OP_WRITE:
+			printf("Write %i bytes at offset %lli to file %s\n", req.count, req.offset, req.filename);
+
+			data = malloc(req.count);
+			ires = nl_recvmsgs_default(sock);
+			check(ires == 0, "nl_recvmsgs_default");
+
+			fseek(f, req.offset, SEEK_SET);
+			resp.count = fwrite((void*)data, sizeof(unsigned char), req.count, f);
+			resp.offset = ftell(f);
+
+			printf("Write response: %i %lli\n", resp.count, resp.offset);
+
+			send_to_kernel(sock, family, PSVFS_C_RESPONSE, &resp, sizeof(resp));
+
+			free((void*)data);
 
 			break;
 		}

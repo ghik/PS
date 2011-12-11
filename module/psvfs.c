@@ -1,30 +1,29 @@
 #include "psvfs.h"
 
-int ires = 0;
-
 int check(int condition, const char* msg) {
 	if(!condition) {
-		printk(KERN_INFO "%s failed with result %i\n", msg, ires);
+		printk(KERN_INFO "%s failed\n", msg);
 		return 0;
 	}
 	return 1;
 }
 
-#define CHECK(condition, msg, target) if(!check((condition), (msg))) goto target;
+#define ASSERT(condition, msg, target) if(!check((condition), (msg))) goto target;
 
 int psvfs_module_init(void) {
+	int res = 0;
 	printk(KERN_INFO "Initializing psvfs module.\n");
 
-	ires = genl_register_family(&psvfs_gnl_family);
-	CHECK(ires == 0, "register_family", out);
-	ires = genl_register_ops(&psvfs_gnl_family, &psvfs_gnl_ops_init);
-	CHECK(ires == 0, "register_init_ops", out);
-	ires = genl_register_ops(&psvfs_gnl_family, &psvfs_gnl_ops_destroy);
-	CHECK(ires == 0, "register_destroy_ops", out);
-	ires = genl_register_ops(&psvfs_gnl_family, &psvfs_gnl_ops_receive_response);
-	CHECK(ires == 0, "register_resp_ops", out);
-	ires = genl_register_ops(&psvfs_gnl_family, &psvfs_gnl_ops_receive_data);
-	CHECK(ires == 0, "register_data_ops", out);
+	res = genl_register_family(&psvfs_gnl_family);
+	ASSERT(res == 0, "register_family", out);
+	res = genl_register_ops(&psvfs_gnl_family, &psvfs_gnl_ops_init);
+	ASSERT(res == 0, "register_init_ops", out);
+	res = genl_register_ops(&psvfs_gnl_family, &psvfs_gnl_ops_destroy);
+	ASSERT(res == 0, "register_destroy_ops", out);
+	res = genl_register_ops(&psvfs_gnl_family, &psvfs_gnl_ops_receive_response);
+	ASSERT(res == 0, "register_resp_ops", out);
+	res = genl_register_ops(&psvfs_gnl_family, &psvfs_gnl_ops_receive_data);
+	ASSERT(res == 0, "register_data_ops", out);
 
 	printk(KERN_INFO "Initialized psvfs module.\n");
   out:
@@ -59,22 +58,22 @@ int psvfs_vfs_init(struct sk_buff *skb2, struct genl_info *info) {
 
 	if(daemon_pid > 0) {
 		res = unregister_filesystem(&psvfs_type);
-		CHECK(res == 0, "unregister_filesystem", out);
+		ASSERT(res == 0, "unregister_filesystem", out);
 
 		if(filenames != NULL) {
 			kfree((void*)filenames);
 		}
 	}
 
-	CHECK(info != NULL && info->attrs != NULL, "genl_info", out);
+	ASSERT(info != NULL && info->attrs != NULL, "genl_info", out);
 
 	na = info->attrs[PSVFS_A_MSG];
-	CHECK(na != NULL, "info->attrs", out);
+	ASSERT(na != NULL, "info->attrs", out);
 
 	fnlen = nla_len(na);
 
 	filenames = kmalloc(fnlen, GFP_KERNEL);
-	CHECK(filenames != NULL, "kmalloc", out);
+	ASSERT(filenames != NULL, "kmalloc", out);
 
 	memcpy((void*)filenames, nla_data(na), fnlen);
 
@@ -82,11 +81,11 @@ int psvfs_vfs_init(struct sk_buff *skb2, struct genl_info *info) {
 	atomic_set(&seq, info->snd_seq);
 
 	res = register_filesystem(&psvfs_type);
-	CHECK(res == 0, "register_filesystem", out);
+	ASSERT(res == 0, "register_filesystem", out);
 
 	res = send_to_daemon("VFS initialized.", strlen("VFS initialized.")+1, PSVFS_C_INIT, atomic_read(&seq),
 		info->snd_pid);
-	CHECK(res == 0, "send_to_daemon", out);
+	ASSERT(res == 0, "send_to_daemon", out);
 
 	resp_ok = 1;
 
@@ -117,17 +116,17 @@ int psvfs_receive_response(struct sk_buff* skb2, struct genl_info *info) {
 
 	resp_ok = 0;
 
-	CHECK(info != NULL && info->attrs != NULL, "genl_info", out);
+	ASSERT(info != NULL && info->attrs != NULL, "genl_info", out);
 
 	na = info->attrs[PSVFS_A_MSG];
-	CHECK(na != NULL, "nlattr", out);
-	CHECK(nla_data(na) != NULL, "nla_data", out);
+	ASSERT(na != NULL, "nlattr", out);
+	ASSERT(nla_data(na) != NULL, "nla_data", out);
 
 	memcpy((void*)&resp, nla_data(na), nla_len(na));
 
-	if(resp.operation == PSVFS_OP_READ) {
+	if(resp.operation == PSVFS_OP_READ && resp.count > 0) {
 		data = kmalloc(resp.count, GFP_KERNEL);
-		CHECK(data != NULL, "kmalloc", out);
+		ASSERT(data != NULL, "kmalloc", out);
 		databytes = 0;
 	}
 
@@ -144,12 +143,12 @@ int psvfs_receive_data(struct sk_buff* skb2, struct genl_info *info) {
 
 	data_ok = 0;
 
-	CHECK(info != NULL && info->attrs != NULL, "genl_info", out);
+	ASSERT(info != NULL && info->attrs != NULL, "genl_info", out);
 
 	na = info->attrs[PSVFS_A_MSG];
-	CHECK(na != NULL, "nlattr", out);
-	CHECK(nla_data(na) != NULL, "nla_data", out);
-	CHECK(data != NULL, "data", out);
+	ASSERT(na != NULL, "nlattr", out);
+	ASSERT(nla_data(na) != NULL, "nla_data", out);
+	ASSERT(data != NULL, "data", out);
 
 	memcpy(((char*)data)+databytes, nla_data(na), nla_len(na));
 	databytes += nla_len(na);
@@ -171,7 +170,8 @@ int psvfs_open(struct inode *inode, struct file *filp) {
 }
 
 ssize_t psvfs_read(struct file *filp, char *buf, size_t count, loff_t *offset) {
-	ssize_t res = 0;
+	ssize_t fres = -EIO;
+	int res;
 
 	if(daemon_pid == 0) {
 		return -EIO;
@@ -192,35 +192,39 @@ ssize_t psvfs_read(struct file *filp, char *buf, size_t count, loff_t *offset) {
 	responded = 0;
 	dataarrived = 0;
 
-	send_to_daemon(&req, sizeof(req), PSVFS_C_REQUEST, atomic_add_return(1,&seq), daemon_pid);
+	res = send_to_daemon(&req, sizeof(req), PSVFS_C_REQUEST, atomic_add_return(1,&seq), daemon_pid);
+	ASSERT(res == 0, "send_to_daemon", out);
+
 	if(wait_event_interruptible(vfs_queue, responded == 1) != 0) {
-		res = -EINTR;
+		fres = -EINTR;
 		goto out;
 	}
 
 	if(!resp_ok) {
-		res = -EIO;
+		fres = -EIO;
 		goto out;
 	}
 
-	CHECK(data != NULL, "kmalloc", out);
+	if(resp.count > 0) {
+		ASSERT(data != NULL, "kmalloc", out);
 
-	printk(KERN_INFO "Waiting for data.\n");
+		printk(KERN_INFO "Waiting for data.\n");
 
-	if(wait_event_interruptible(vfs_queue, dataarrived == 1) != 0) {
-		res = -EINTR;
-		goto out;
+		if(wait_event_interruptible(vfs_queue, dataarrived == 1) != 0) {
+			fres = -EINTR;
+			goto out;
+		}
+
+		if(!data_ok) {
+			fres = -EIO;
+			goto out;
+		}
+
+		copy_to_user(buf, (void*)data, resp.count);
 	}
-
-	if(!data_ok) {
-		res = -EIO;
-		goto out;
-	}
-
-	copy_to_user(buf, (void*)data, resp.count);
 
 	*offset = resp.offset;
-	res = resp.count;
+	fres = resp.count;
 
   out:
   	if(data != NULL) {
@@ -229,11 +233,14 @@ ssize_t psvfs_read(struct file *filp, char *buf, size_t count, loff_t *offset) {
   	}
 
 	mutex_unlock(&vfs_mutex);
-	return res;
+	return fres;
 }
 
 ssize_t psvfs_write(struct file *filp, const char *buf, size_t count,
 		loff_t *offset) {
+	ssize_t fres = -EIO;
+	int res;
+
 	if(daemon_pid == 0) {
 		return -EIO;
 	}
@@ -242,31 +249,72 @@ ssize_t psvfs_write(struct file *filp, const char *buf, size_t count,
 		return -EINTR;
 	}
 
+	printk(KERN_INFO "Write request to file %s at %lli size %i\n", filp->f_path.dentry->d_name.name, *offset, count);
+
+	strcpy(req.filename, filp->f_path.dentry->d_name.name);
+	req.operation = PSVFS_OP_WRITE;
+	req.count = count;
+	req.offset = *offset;
+
+	if(count > 0) {
+		data = kmalloc(count, GFP_KERNEL);
+		ASSERT(data != NULL, "kmalloc", out);
+		copy_from_user((void*)data, buf, count);
+	}
+
+	res = send_to_daemon(&req, sizeof(req), PSVFS_C_REQUEST, atomic_add_return(1,&seq), daemon_pid);
+	ASSERT(res == 0, "send_to_daemon", out);
+
+	if(count > 0) {
+		res = send_to_daemon((void*)data, count, PSVFS_C_DATA, atomic_add_return(1,&seq), daemon_pid);
+		ASSERT(res == 0, "send_to_daemon", out);
+	}
+
+	if(wait_event_interruptible(vfs_queue, responded == 1) != 0) {
+		fres = -EINTR;
+		goto out;
+	}
+
+	if(!resp_ok) {
+		fres = -EIO;
+		goto out;
+	}
+
+	*offset = resp.offset;
+	fres = resp.count;
+
+  out:
+    if(data != NULL) {
+    	kfree((void*)data);
+    	data = NULL;
+    }
+
 	mutex_unlock(&vfs_mutex);
-	return 0;
+	return fres;
 }
 
 int send_to_daemon(void* msg, int len, int command, int seq, u32 pid) {
 	struct sk_buff* skb;
 	void* msg_head;
+	int res;
 
-	skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
-	CHECK(skb != NULL, "genlmsg_new", nomem);
+	skb = genlmsg_new(GENL_HDRLEN+nla_total_size(len)+36, GFP_KERNEL);
+	ASSERT(skb != NULL, "genlmsg_new", nomem);
 
 	msg_head = genlmsg_put(skb, pid, seq, &psvfs_gnl_family, 0, command);
-	CHECK(msg_head != NULL, "genlmsg_put", nomem);
+	ASSERT(msg_head != NULL, "genlmsg_put", nomem);
 
-	ires = nla_put(skb, PSVFS_A_MSG, len, msg);
-	CHECK(ires == 0, "nla_put", out);
+	res = nla_put(skb, PSVFS_A_MSG, len, msg);
+	ASSERT(res == 0, "nla_put", out);
 
-	ires = genlmsg_end(skb, msg_head);
-	CHECK(ires > 0, "genlmsg_end", out);
+	res = genlmsg_end(skb, msg_head);
+	ASSERT(res > 0, "genlmsg_end", out);
 
-	ires = genlmsg_unicast(&init_net, skb, pid);
-	CHECK(ires == 0, "genlmsg_unicast", out);
+	res = genlmsg_unicast(&init_net, skb, pid);
+	ASSERT(res == 0, "genlmsg_unicast", out);
 
   out:
-    return ires;
+    return res;
 
   nomem:
     return -ENOMEM;
@@ -303,7 +351,7 @@ struct dentry *create_file(struct super_block *sb, struct dentry *dir,
 	dentry = d_alloc(dir, &qname);
 	if (!dentry)
 		goto out;
-	inode = make_inode(sb, S_IFREG | 0644);
+	inode = make_inode(sb, S_IFREG | 0777);
 	if (!inode)
 		goto out_dput;
 	inode->i_fop = &psvfs_file_ops;
@@ -340,7 +388,7 @@ int fill_super(struct super_block *sb, void *data, int silent) {
 	sb->s_magic = LFS_MAGIC;
 	sb->s_op = &psvfs_super_ops;
 
-	root = make_inode(sb, S_IFDIR | 0755);
+	root = make_inode(sb, S_IFDIR | 0777);
 	if (!root)
 		goto out;
 	root->i_op = &simple_dir_inode_operations;
