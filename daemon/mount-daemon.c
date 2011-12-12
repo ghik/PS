@@ -5,7 +5,7 @@
 //#define DEBUG INT32_MAX
 #define DEBUG 0
 
-char *user, *host, *mount_path;
+char *user, *host, *mount_path, *ssh_path;
 ssh_session my_ssh_session;
 int family;
 int mounted = -1;
@@ -16,6 +16,8 @@ struct nl_sock* my_socket;
 struct rw_request req;
 struct rw_response resp;
 
+void session_close();
+
 struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1] = {
   [PSVFS_A_MSG] = { .type = NLA_UNSPEC }, // no policy, just a chunk of bytes
 };
@@ -24,6 +26,7 @@ void check(int condition, const char* msg, int ires, void* pres) {
 	if(!condition) {
 		fprintf(stderr, "%s failed with results %i %i\n", msg, ires, (int)pres);
 		perror("Fail is");
+		session_close();
 		exit(1);
 	}
 }
@@ -112,12 +115,12 @@ struct nl_sock* init_nl() {
   return sock;
 }
 
-void init_ssh(char* user, char* host) {
+void init_ssh(char* user, char* host, char* path) {
 
   // init 
-  my_ssh_session = open_ssh_session(host, user);
+  my_ssh_session = open_ssh_session(host, user, path);
   printf("Authentication succeeded!\n");
-  printf("Connection to %s@%s established\n", user, host);
+  printf("Connection to %s@%s:%s established\n", user, host, path);
 }
 
 void session_close() {
@@ -156,17 +159,18 @@ int mount_vfs() {
 
 
 int main(int argc, char** argv) {
-  if (argc < 4) {
-    printf("Za malo parametrow. Parametry: user host sciezka_do_montowania\n");
+  if (argc < 5) {
+    printf("Za malo parametrow. Parametry: user host sciezka_zdalna sciezka_do_montowania\n");
     exit(-1);
   }
   
   user = argv[1];
   host = argv[2];
-  mount_path = argv[3];
+  ssh_path = argv[3];
+  mount_path = argv[4];
 
   // inicjalizacja sesji ssh
-  init_ssh(user, host);
+  init_ssh(user, host, ssh_path);
   
   // inicjalizacja netlink'a
   my_socket = init_nl();

@@ -79,7 +79,7 @@ int verify_knownhost(ssh_session session)
 }
 
 
-ssh_session open_ssh_session(char* host, char* user) {
+ssh_session open_ssh_session(char* host, char* user, char* path) {
   int rc;
   char* password;
   // Open session and set options
@@ -87,6 +87,7 @@ ssh_session open_ssh_session(char* host, char* user) {
   if (session == NULL)
     exit(-1);
   ssh_options_set(session, SSH_OPTIONS_HOST, host);
+  ssh_options_set(session, SSH_OPTIONS_SSH_DIR, path);
 
   // Connect to server
   rc = ssh_connect(session);
