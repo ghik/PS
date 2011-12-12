@@ -59,6 +59,10 @@ module_exit(psvfs_module_exit);
  * Netlink stuff
  */
 
+struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1] = {
+	[PSVFS_A_MSG] = { .type = NLA_UNSPEC }, // no policy, just a chunk of bytes
+};
+
 static struct genl_family psvfs_gnl_family = {
     .id = GENL_ID_GENERATE,
     .hdrsize = 0,

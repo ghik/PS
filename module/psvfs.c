@@ -1,10 +1,5 @@
 #include "psvfs.h"
 
-struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1] = {
-  [PSVFS_A_MSG] = { .type = NLA_UNSPEC }, // no policy, just a chunk of bytes
-};
-
-
 int check(int condition, const char* msg) {
 	if(!condition) {
 		printk(KERN_INFO "%s failed\n", msg);
@@ -107,7 +102,7 @@ int psvfs_vfs_destroy(struct sk_buff *skb2, struct genl_info *info) {
 	printk(KERN_INFO "Destroying virtual filesystem.\n");
 
 	unregister_filesystem(&psvfs_type);
-	daemon_pid = -1;
+	daemon_pid = 0;
 
 	if(filenames != NULL) {
 		kfree((void*)filenames);
@@ -171,6 +166,10 @@ int psvfs_receive_data(struct sk_buff* skb2, struct genl_info *info) {
 }
 
 int psvfs_open(struct inode *inode, struct file *filp) {
+	if(daemon_pid == 0) {
+		return -EIO;
+	}
+
 	return 0;
 }
 
@@ -307,9 +306,12 @@ ssize_t psvfs_write(struct file *filp, const char *buf, size_t count,
 int send_to_daemon(void* msg, int len, int command, int seq, u32 pid) {
 	struct sk_buff* skb;
 	void* msg_head;
-	int res;
+	int res, payload;
 
-	skb = genlmsg_new(GENL_HDRLEN+nla_total_size(len)+36, GFP_KERNEL);
+	printk(KERN_INFO "Trying to send %i bytes of data.\n", len);
+
+	payload = GENL_HDRLEN+nla_total_size(len)+36;
+	skb = genlmsg_new(payload, GFP_KERNEL);
 	ASSERT(skb != NULL, "genlmsg_new", nomem);
 
 	msg_head = genlmsg_put(skb, pid, seq, &psvfs_gnl_family, 0, command);
@@ -320,6 +322,8 @@ int send_to_daemon(void* msg, int len, int command, int seq, u32 pid) {
 
 	res = genlmsg_end(skb, msg_head);
 	ASSERT(res > 0, "genlmsg_end", out);
+
+	printk(KERN_INFO "Sizes %u %u %u", skb->hdr_len, skb->data_len, skb->len);
 
 	res = genlmsg_unicast(&init_net, skb, pid);
 	printk("If failed, it is %i\n", res);

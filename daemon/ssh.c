@@ -128,9 +128,11 @@ void close_session(ssh_session session) {
 }
 
 
-int sftp_read_file(ssh_session session, char* filepath, int offset, int size, char* buffer) {
+int sftp_read_file(ssh_session session, char* filepath, loff_t* offset, int size, char* buffer) {
   sftp_session sftp;
   int rc, sum;
+
+  printf("Getting session.\n");
 
   // init
   sftp = sftp_new(session);
@@ -138,8 +140,10 @@ int sftp_read_file(ssh_session session, char* filepath, int offset, int size, ch
     {
       fprintf(stderr, "Error allocating SFTP session: %s\n",
 	      ssh_get_error(session));
-      return SSH_ERROR;
+      return -EIO;
     }
+
+  printf("GOT session.\n");
 
   rc = sftp_init(sftp);
   if (rc != SSH_OK)
@@ -147,24 +151,28 @@ int sftp_read_file(ssh_session session, char* filepath, int offset, int size, ch
       fprintf(stderr, "Error initializing SFTP session: %s.\n",
 	      (char*) sftp_get_error(sftp));
       sftp_free(sftp);
-      return rc;
+      return -EIO;
     }
+
+  printf("GOT sftp.\n");
 
   // read
   sum = sftp_read_sync(session, sftp, filepath, offset, size, buffer);
   
+  printf("Data read.\n");
+
   // closing
+
   sftp_free(sftp);
   return sum;
 }
 
 
-int sftp_read_sync(ssh_session session, sftp_session sftp, char* filepath, int offset, int size, char* buffer)
+int sftp_read_sync(ssh_session session, sftp_session sftp, char* filepath, loff_t* offset, int size, char* buffer)
 {
   int access_type;
   sftp_file file;
   int nbytes, rc;
-  int sum = 0;
 
   access_type = O_RDONLY;
   file = sftp_open(sftp, filepath,
@@ -173,50 +181,40 @@ int sftp_read_sync(ssh_session session, sftp_session sftp, char* filepath, int o
     {
       fprintf(stderr, "Can't open file for reading: %s\n",
 	      ssh_get_error(session));
-      return SSH_ERROR;
+      return -EIO;
     }
 
-  if (sftp_seek(file, offset) < 0)
+  if (sftp_seek(file, *offset) < 0)
     {
       fprintf(stderr, "Can't seek file: %s\n",
 	      ssh_get_error(session));
-      return SSH_ERROR;
+      return -EIO;
     
     }
 
-  nbytes = sftp_read(file, &buffer, sizeof(*buffer));
-  while (nbytes > 0)
-    {
-      sum += nbytes;
-      if (write(1, &buffer, nbytes) != nbytes)
-	{
-	  sftp_close(file);
-	  return SSH_ERROR;
-	}
-      nbytes = sftp_read(file, &buffer, sizeof(*buffer));
-    }
+  nbytes = sftp_read(file, buffer, size);
 
   if (nbytes < 0)
     {
       fprintf(stderr, "Error while reading file: %s\n",
 	      ssh_get_error(session));
-      sftp_close(file);
-      return SSH_ERROR;
     }
+
+  *offset = sftp_tell(file);
 
   rc = sftp_close(file);
   if (rc != SSH_OK)
     {
       fprintf(stderr, "Can't close the read file: %s\n",
 	      ssh_get_error(session));
-      return rc;
+      return -EIO;
     }
 
-  return sum;
+  return nbytes;
 }
 
 
-int sftp_write_file(ssh_session session, char* filepath, int offset, char* msg) {
+int sftp_write_file(ssh_session session, char* filepath, loff_t* offset, char* msg, int size) {
   sftp_session sftp;
   int rc;
 
@@ -226,7 +224,7 @@ int sftp_write_file(ssh_session session, char* filepath, int offset, char* msg) 
     {
       fprintf(stderr, "Error allocating SFTP session: %s\n",
 	      ssh_get_error(session));
-      return SSH_ERROR;
+      return -EIO;
     }
 
   rc = sftp_init(sftp);
@@ -235,11 +233,11 @@ int sftp_write_file(ssh_session session, char* filepath, int offset, char* msg) 
       fprintf(stderr, "Error initializing SFTP session: %s.\n",
 	      (char*) sftp_get_error(sftp));
       sftp_free(sftp);
-      return rc;
+      return -EIO;
     }
 
   // write
-  rc = sftp_write_sync(session, sftp, filepath, offset, msg);
+  rc = sftp_write_sync(session, sftp, filepath, offset, msg, size);
   
   // closing
   sftp_free(sftp);
@@ -247,11 +245,10 @@ int sftp_write_file(ssh_session session, char* filepath, int offset, char* msg) 
 }
 
 
-int sftp_write_sync(ssh_session session, sftp_session sftp, char* filepath, int offset, char* msg)
+int sftp_write_sync(ssh_session session, sftp_session sftp, char* filepath, loff_t* offset, char* msg, int size)
 {
-  int access_type = O_WRONLY | O_CREAT;
+  int access_type = O_WRONLY;
   sftp_file file;
-  int length = strlen(msg);
   int rc, nwritten;
 
   file = sftp_open(sftp, filepath,
@@ -260,32 +257,31 @@ int sftp_write_sync(ssh_session session, sftp_session sftp, char* filepath, int 
     {
       fprintf(stderr, "Can't open file for writing: %s\n",
 	      ssh_get_error(session));
-      return SSH_ERROR;
+      return -EIO;
     }
 
-  if (sftp_seek(file, offset) < 0)
+  if (sftp_seek(file, *offset) < 0)
     {
       fprintf(stderr, "Can't seek file: %s\n",
 	      ssh_get_error(session));
-      return SSH_ERROR;
+      return -EIO;
     
     }
   
-  nwritten = sftp_write(file, msg, length);
-  if (nwritten != length)
+  nwritten = sftp_write(file, msg, size);
+  if (nwritten != size)
     {
       fprintf(stderr, "Can't write data to file: %s\n",
 	      ssh_get_error(session));
-      sftp_close(file);
-      return nwritten;
     }
+
+  *offset = sftp_tell(file);
 
   rc = sftp_close(file);
   if (rc != SSH_OK)
     {
       fprintf(stderr, "Can't close the written file: %s\n",
 	      ssh_get_error(session));
-      return rc;
     }
 
   return nwritten;

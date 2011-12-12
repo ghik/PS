@@ -16,6 +16,55 @@ struct nl_sock* my_socket;
 struct rw_request req;
 struct rw_response resp;
 
+struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1] = {
+  [PSVFS_A_MSG] = { .type = NLA_UNSPEC }, // no policy, just a chunk of bytes
+};
+
+void check(int condition, const char* msg, int ires, void* pres) {
+	if(!condition) {
+		fprintf(stderr, "%s failed with results %i %i\n", msg, ires, (int)pres);
+		perror("Fail is");
+		exit(1);
+	}
+}
+
+int receive_from_kernel_cb(struct nl_msg *msg, void *arg) {
+	struct nlmsghdr* hdr = nlmsg_hdr(msg);
+	struct nlattr* attrs[PSVFS_A_MAX+1];
+	void** dest = (void**)arg;
+	int len;
+
+	check(hdr != NULL, "nlmsg_hdr", 0, NULL);
+
+	ires = genlmsg_parse(hdr, 0, attrs, PSVFS_A_MAX, psvfs_genl_policy);
+	check(ires == 0, "genlmsg_parse", ires, NULL);
+
+	len = nla_len(attrs[PSVFS_A_MSG]);
+	if(attrs[PSVFS_A_MSG] != NULL && len > 0) {
+		memcpy(*dest, nla_data(attrs[PSVFS_A_MSG]), len);
+	}
+
+	return 0;
+}
+
+void send_to_kernel(struct nl_sock* sock, int family, int command, void* msg, int len) {
+	// 36 was determined by binary search :) no idea how exactly do it
+	struct nl_msg *nlmsg = nlmsg_alloc_size(GENL_HDRLEN+nla_total_size(len)+36);
+	check(nlmsg != NULL, "alloc", 0, pres);
+
+	pres = genlmsg_put(nlmsg, NL_AUTO_PID, NL_AUTO_SEQ, family, 0, NLM_F_ECHO, command, PSVFS_VERSION);
+	check(pres != NULL, "genlmsg_put", 0, pres);
+
+	ires = nla_put(nlmsg, PSVFS_A_MSG, len, msg);
+	check(ires == 0, "nla_put", ires, pres);
+
+	// Send message over netlink socket
+	ires = nl_send_auto_complete(sock, nlmsg);
+	check(ires >= 0, "nl_send", ires, pres);
+
+	nlmsg_free(nlmsg);
+}
+
 struct nl_sock* init_nl() {
   struct nl_sock *sock;
   int i, res;
@@ -23,7 +72,7 @@ struct nl_sock* init_nl() {
   char buf[4096];
   char* ptr = buf;
 
-  nl_debug = DEBUG;
+  nl_debug = INT32_MAX;
 
   // Allocate a new netlink socket
   sock = nl_socket_alloc();
@@ -56,7 +105,7 @@ struct nl_sock* init_nl() {
   data = buf;
   
   ires = nl_recvmsgs_default(sock);
-  check(ires == 0, "recvmsgs");
+  check(ires == 0, "recvmsgs", ires, NULL);
   
   printf("Kernel says: %s\n", buf);
   
@@ -89,14 +138,13 @@ void INThandler(int sig) {
 }
 
 void perform_read() {
-  resp.count = sftp_read_file(my_ssh_session, req.filename, req.offset, req.count, (char*) data);
-  resp.offset = resp.count + req.offset;
+  resp.offset = req.offset;
+  resp.count = sftp_read_file(my_ssh_session, req.filename, &resp.offset, req.count, (char*) data);
 }
 
 void perform_write() {
-  sftp_write_file(my_ssh_session, req.filename, req.offset, (char*) data);
-  resp.count = req.count;
-  resp.offset = req.offset + resp.count;
+  resp.offset = req.offset;
+  resp.count = sftp_write_file(my_ssh_session, req.filename, &resp.offset, (char*) data, req.count);
 }
 
 int mount_vfs() {
@@ -123,6 +171,8 @@ int main(int argc, char** argv) {
   // inicjalizacja netlink'a
   my_socket = init_nl();
   
+  sleep(1);
+
   // zamontuj
   mounted = mount_vfs();
   
@@ -147,7 +197,7 @@ int main(int argc, char** argv) {
 
       send_to_kernel(my_socket, family, PSVFS_C_RESPONSE, &resp, sizeof(resp));
       if(resp.count > 0) {
-	send_to_kernel(my_socket, family, PSVFS_C_DATA, (void*)data, resp.count);
+    	  send_to_kernel(my_socket, family, PSVFS_C_DATA, (void*)data, resp.count);
       }
 
       free((void*)data);

@@ -14,7 +14,7 @@
 #include <netlink/netlink.h>
 #include <netlink/genl/genl.h>
 #include <netlink/genl/ctrl.h>
-int receive_from_kernel_cb(struct nl_msg *msg, void *arg, void* pres);
+int receive_from_kernel_cb(struct nl_msg *msg, void *arg);
 #endif
 
 #define MAX_PATH_SIZE 256
@@ -43,9 +43,6 @@ enum {
 	__PSVFS_C_MAX,
 };
 #define PSVFS_C_MAX (__PSVFS_C_MAX - 1)
-
-extern struct nla_policy psvfs_genl_policy[PSVFS_A_MAX + 1];
-
 
 #define PSVFS_VERSION 1
 #define PSVFS_FAMILY_NAME "PSVFS_FAMILY"
