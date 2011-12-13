@@ -14,6 +14,9 @@ int psvfs_module_init(void) {
 	int res = 0;
 	printk(KERN_INFO "Initializing psvfs module.\n");
 
+	res = register_filesystem(&psvfs_type);
+	ASSERT(res == 0, "register_filesystem", out);
+
 	res = genl_register_family(&psvfs_gnl_family);
 	ASSERT(res == 0, "register_family", out);
 	res = genl_register_ops(&psvfs_gnl_family, &psvfs_gnl_ops_init);
@@ -34,8 +37,6 @@ void psvfs_module_exit(void) {
 	printk(KERN_INFO "Exiting psvfs module.\n");
 
 	if(daemon_pid > 0) {
-		unregister_filesystem(&psvfs_type);
-
 		if(filenames != NULL) {
 			kfree((void*)filenames);
 		}
@@ -46,6 +47,8 @@ void psvfs_module_exit(void) {
 	genl_unregister_ops(&psvfs_gnl_family, &psvfs_gnl_ops_destroy);
 	genl_unregister_ops(&psvfs_gnl_family, &psvfs_gnl_ops_init);
 	genl_unregister_family(&psvfs_gnl_family);
+
+	unregister_filesystem(&psvfs_type);
 }
 
 int psvfs_vfs_init(struct sk_buff *skb2, struct genl_info *info) {
@@ -57,9 +60,6 @@ int psvfs_vfs_init(struct sk_buff *skb2, struct genl_info *info) {
 	resp_ok = 0;
 
 	if(daemon_pid > 0) {
-		res = unregister_filesystem(&psvfs_type);
-		ASSERT(res == 0, "unregister_filesystem", out);
-
 		if(filenames != NULL) {
 			kfree((void*)filenames);
 		}
@@ -80,9 +80,6 @@ int psvfs_vfs_init(struct sk_buff *skb2, struct genl_info *info) {
 	daemon_pid = info->snd_pid;
 	atomic_set(&seq, info->snd_seq);
 
-	res = register_filesystem(&psvfs_type);
-	ASSERT(res == 0, "register_filesystem", out);
-
 	res = send_to_daemon("VFS initialized.", strlen("VFS initialized.")+1, PSVFS_C_INIT, atomic_read(&seq),
 		info->snd_pid);
 	ASSERT(res == 0, "send_to_daemon", out);
@@ -101,7 +98,6 @@ int psvfs_vfs_init(struct sk_buff *skb2, struct genl_info *info) {
 int psvfs_vfs_destroy(struct sk_buff *skb2, struct genl_info *info) {
 	printk(KERN_INFO "Destroying virtual filesystem.\n");
 
-	unregister_filesystem(&psvfs_type);
 	daemon_pid = 0;
 
 	if(filenames != NULL) {
@@ -155,8 +151,6 @@ int psvfs_receive_data(struct sk_buff* skb2, struct genl_info *info) {
 
 	data_ok = 1;
 
-	printk(KERN_INFO "We want %i, we have %i\n", resp.count, databytes);
-
   out:
     if(databytes >= resp.count) {
     	dataarrived = 1;
@@ -188,7 +182,6 @@ ssize_t psvfs_read(struct file *filp, char *buf, size_t count, loff_t *offset) {
 	printk(KERN_INFO "Read request to file %s at %lli size %i\n", filp->f_path.dentry->d_name.name, *offset, count);
 	strcpy(req.filename, filp->f_path.dentry->d_name.name);
 
-	printk(KERN_INFO "%s\n", req.filename);
 	req.offset = *offset;
 	req.count = count;
 	req.operation = PSVFS_OP_READ;
@@ -211,8 +204,6 @@ ssize_t psvfs_read(struct file *filp, char *buf, size_t count, loff_t *offset) {
 
 	if(resp.count > 0) {
 		ASSERT(data != NULL, "kmalloc", out);
-
-		printk(KERN_INFO "Waiting for data.\n");
 
 		if(wait_event_interruptible(vfs_queue, dataarrived == 1) != 0) {
 			fres = -EINTR;
@@ -269,14 +260,10 @@ ssize_t psvfs_write(struct file *filp, const char *buf, size_t count,
 	res = send_to_daemon(&req, sizeof(req), PSVFS_C_REQUEST, atomic_add_return(1,&seq), daemon_pid);
 	ASSERT(res == 0, "send_to_daemon", out);
 
-	printk(KERN_INFO "Write request sent.\n");
-
 	if(count > 0) {
 		res = send_to_daemon((void*)data, count, PSVFS_C_DATA, atomic_add_return(1,&seq), daemon_pid);
 		ASSERT(res == 0, "send_to_daemon", out);
 	}
-
-	printk(KERN_INFO "Data sent.\n");
 
 	if(wait_event_interruptible(vfs_queue, responded == 1) != 0) {
 		fres = -EINTR;
@@ -287,8 +274,6 @@ ssize_t psvfs_write(struct file *filp, const char *buf, size_t count,
 		fres = -EIO;
 		goto out;
 	}
-
-	printk(KERN_INFO "Got response %i %lli\n", resp.count, resp.offset);
 
 	*offset = resp.offset;
 	fres = resp.count;
@@ -323,10 +308,7 @@ int send_to_daemon(void* msg, int len, int command, int seq, u32 pid) {
 	res = genlmsg_end(skb, msg_head);
 	ASSERT(res > 0, "genlmsg_end", out);
 
-	printk(KERN_INFO "Sizes %u %u %u", skb->hdr_len, skb->data_len, skb->len);
-
 	res = genlmsg_unicast(&init_net, skb, pid);
-	printk("If failed, it is %i\n", res);
 	ASSERT(res == 0, "genlmsg_unicast", out);
 
   out:
@@ -387,7 +369,7 @@ struct dentry *create_file(struct super_block *sb, struct dentry *dir,
 
 static void create_files(struct super_block *sb, struct dentry *root) {
 	char* ptr = (char*)filenames;
-	printk(KERN_INFO "fnlen is %i", fnlen);
+	printk(KERN_INFO "Filling superblock with files.\n");
 	while (ptr < ((char*)filenames) + fnlen) {
 		printk(KERN_INFO "Creating file %s\n", ptr);
 		create_file(sb, root, ptr);
@@ -416,6 +398,7 @@ int fill_super(struct super_block *sb, void *data, int silent) {
 	sb->s_root = root_dentry;
 
 	create_files(sb, root_dentry);
+
 	return 0;
 
 	out_iput: iput(root);

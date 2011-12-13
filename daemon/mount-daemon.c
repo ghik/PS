@@ -72,10 +72,8 @@ struct nl_sock* init_nl() {
   struct nl_sock *sock;
   int i, res;
 
-  char buf[4096];
-  char* ptr = buf;
-
-  nl_debug = INT32_MAX;
+  char buf[65536];
+  int buflen;
 
   // Allocate a new netlink socket
   sock = nl_socket_alloc();
@@ -95,16 +93,9 @@ struct nl_sock* init_nl() {
   ires = nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, receive_from_kernel_cb, (void*)&data);
   check(ires == 0, "modify_cb", ires, pres);
   
-  strcpy(ptr, "somefile");
-  ptr += strlen(ptr)+1;
-  strcpy(ptr, "anotherfile");
-  ptr += strlen(ptr)+1;
-  strcpy(ptr, "somethingelse");
-  ptr += strlen(ptr)+1;
+  buflen = sftp_list_dir(my_ssh_session, ssh_path, buf);
   
-  printf("Len is %i\n", ptr-buf);
-  
-  send_to_kernel(sock, family, PSVFS_C_INIT, buf, ptr-buf);
+  send_to_kernel(sock, family, PSVFS_C_INIT, buf, buflen);
   data = buf;
   
   ires = nl_recvmsgs_default(sock);
@@ -141,13 +132,23 @@ void INThandler(int sig) {
 }
 
 void perform_read() {
+  char* fullpath = malloc(strlen(ssh_path)+strlen(req.filename)+2);
+  sprintf(fullpath, "%s/%s", ssh_path, req.filename);
+
   resp.offset = req.offset;
-  resp.count = sftp_read_file(my_ssh_session, req.filename, &resp.offset, req.count, (char*) data);
+  resp.count = sftp_read_file(my_ssh_session, fullpath, &resp.offset, req.count, (char*) data);
+
+  free(fullpath);
 }
 
 void perform_write() {
+  char* fullpath = malloc(strlen(ssh_path)+strlen(req.filename)+2);
+  sprintf(fullpath, "%s/%s", ssh_path, req.filename);
+
   resp.offset = req.offset;
-  resp.count = sftp_write_file(my_ssh_session, req.filename, &resp.offset, (char*) data, req.count);
+  resp.count = sftp_write_file(my_ssh_session, fullpath, &resp.offset, (char*) data, req.count);
+
+  free(fullpath);
 }
 
 int mount_vfs() {

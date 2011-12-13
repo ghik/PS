@@ -133,8 +133,6 @@ int sftp_read_file(ssh_session session, char* filepath, loff_t* offset, int size
   sftp_session sftp;
   int rc, sum;
 
-  printf("Getting session.\n");
-
   // init
   sftp = sftp_new(session);
   if (sftp == NULL)
@@ -143,8 +141,6 @@ int sftp_read_file(ssh_session session, char* filepath, loff_t* offset, int size
 	      ssh_get_error(session));
       return -EIO;
     }
-
-  printf("GOT session.\n");
 
   rc = sftp_init(sftp);
   if (rc != SSH_OK)
@@ -155,13 +151,9 @@ int sftp_read_file(ssh_session session, char* filepath, loff_t* offset, int size
       return -EIO;
     }
 
-  printf("GOT sftp.\n");
-
   // read
   sum = sftp_read_sync(session, sftp, filepath, offset, size, buffer);
   
-  printf("Data read.\n");
-
   // closing
 
   sftp_free(sftp);
@@ -286,6 +278,56 @@ int sftp_write_sync(ssh_session session, sftp_session sftp, char* filepath, loff
     }
 
   return nwritten;
+}
+
+int sftp_list_dir(ssh_session session, char* dirpath, char* buf) {
+  sftp_session sftp;
+  sftp_dir dir;
+  sftp_attributes attrs;
+  char* ptr = buf;
+  int rc, sum;
+
+  // init
+  sftp = sftp_new(session);
+  if (sftp == NULL)
+	{
+	  fprintf(stderr, "Error allocating SFTP session: %s\n",
+		  ssh_get_error(session));
+	  return -1;
+	}
+
+  rc = sftp_init(sftp);
+  if (rc != SSH_OK)
+	{
+	  fprintf(stderr, "Error initializing SFTP session: %s.\n",
+		  (char*) sftp_get_error(sftp));
+	  sftp_free(sftp);
+	  return -1;
+	}
+
+  dir = sftp_opendir(sftp, dirpath);
+  if(dir == NULL)
+  	{
+	  fprintf(stderr, "Error opening directory: %s.\n",
+		  (char*) sftp_get_error(sftp));
+	  sftp_free(sftp);
+	  return -1;
+    }
+
+  while(1) {
+	  attrs = sftp_readdir(sftp, dir);
+	  if(attrs == NULL) {
+		  break;
+	  }
+	  if(attrs->type == SSH_FILEXFER_TYPE_REGULAR) {
+		  strcpy(ptr, attrs->name);
+		  ptr += strlen(ptr)+1;
+	  }
+  }
+
+  sftp_free(sftp);
+
+  return ptr-buf;
 }
 
 /*
